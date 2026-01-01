@@ -1,17 +1,17 @@
 import streamlit as st
 import google.generativeai as genai
+import time
 
 # 1. KONFIGURASI DASAR
 st.set_page_config(page_title="AI Generator Soal", layout="centered")
-st.title("📝 AI Question Generator (Pro)")
+st.title("📝 AI Question Generator (Visual Edition)")
 
 # 2. KONEKSI API
 if "GEMINI_API_KEY" in st.secrets:
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # Mencari model yang tersedia secara otomatis
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        model_name = available_models[0].replace('models/', '')
+        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        model_name = models[0].replace('models/', '')
         model = genai.GenerativeModel(model_name)
     except Exception as e:
         st.error(f"Koneksi Gagal: {e}")
@@ -23,89 +23,79 @@ else:
 # 3. INPUT USER
 with st.sidebar:
     st.header("⚙️ Pengaturan")
-    topik = st.text_input("Topik (Contoh: VLAN Cisco):")
+    topik = st.text_input("Topik (Contoh: Static Route Cisco):")
     tipe = st.radio("Tipe Soal:", ["Pilihan Ganda", "Praktek / Lab"])
-    generate_btn = st.button("Generate Soal 🚀")
+    # Gunakan key unik untuk tombol generate
+    generate_btn = st.button("Generate Soal 🚀", key="main_generate_btn")
 
-# 4. LOGIKA GENERATE (DENGAN DIAGRAM TOPOLOGI)
+# 4. LOGIKA GENERATE
 if generate_btn and topik:
     with st.spinner("AI sedang merancang soal dan topologi..."):
+        # Kita minta AI menggunakan penanda yang lebih kaku agar split tidak gagal
         prompt = f"""
         Buatkan 1 soal {tipe} tentang {topik}.
-        Tuliskan dengan format persis seperti ini:
+        Gunakan format pemisah [BAGIAN] agar sistem tidak error.
         
-        TOPOLOGI:
-        (Buat diagram jaringan sederhana menggunakan karakter ASCII/Teks, contoh: [R1]--f0/0--[R2])
+        [TOPOLOGI]
+        (Buat diagram ASCII jaringan)
         
-        ###
-        PERTANYAAN: 
-        (isi pertanyaan atau skenario lab di sini)
+        [PERTANYAAN]
+        (Isi soal atau skenario)
         
-        ###
-        JAWABAN: 
-        (isi kunci jawaban atau langkah CLI di sini)
+        [JAWABAN]
+        (Isi kunci jawaban atau CLI)
         
-        ###
-        PENJELASAN: 
-        (isi penjelasan singkat di sini)
+        [PENJELASAN]
+        (Isi penjelasan singkat)
         """
         
         try:
             response = model.generate_content(prompt)
-            hasil_teks = response.text
+            txt = response.text
             
-            # Membagi teks menjadi 4 bagian
-            bagian = hasil_teks.split("###")
-            
-            if len(bagian) >= 4:
-                st.session_state['topologi'] = bagian[0].replace("TOPOLOGI:", "").strip()
-                st.session_state['soal'] = bagian[1].replace("PERTANYAAN:", "").strip()
-                st.session_state['kunci'] = bagian[2].replace("JAWABAN:", "").strip()
-                st.session_state['info'] = bagian[3].replace("PENJELASAN:", "").strip()
-                st.session_state['tipe_lalu'] = tipe
-                st.rerun()
-            else:
-                st.error("Format AI kurang lengkap, silakan klik Generate lagi.")
-        except Exception as e:
-            st.error(f"Kesalahan: {e}")
+            # Fungsi potong teks yang lebih aman
+            def ambil_bagian(tag, teks):
+                try:
+                    return teks.split(f"[{tag}]")[1].split("[")[0].strip()
+                except:
+                    return f"Bagian {tag} tidak tergenerasi dengan sempurna."
 
-# 5. TAMPILAN (DENGAN VISUALISASI)
-if 'soal' in st.session_state:
-    st.divider()
-    
-    # Menampilkan Diagram Topologi
-    if st.session_state.get('topologi'):
-        st.subheader("🌐 Network Topology")
-        st.code(st.session_state['topologi'], language="text")
-    
-    st.subheader("📋 Pertanyaan")
-    st.write(st.session_state['soal'])
-    
-    if st.button("Tampilkan Jawaban & Solusi"):
-        st.success("✅ Kunci Jawaban / Langkah Konfigurasi:")
-        if st.session_state.get('tipe_lalu') == "Praktek / Lab":
-            st.code(st.session_state['kunci'], language="bash")
-        else:
-            st.write(st.session_state['kunci'])
+            st.session_state['vis_topologi'] = ambil_bagian("TOPOLOGI", txt)
+            st.session_state['vis_soal'] = ambil_bagian("PERTANYAAN", txt)
+            st.session_state['vis_kunci'] = ambil_bagian("JAWABAN", txt)
+            st.session_state['vis_info'] = ambil_bagian("PENJELASAN", txt)
+            st.session_state['vis_tipe'] = tipe
+            # Gunakan timestamp agar ID selalu unik setelah generate
+            st.session_state['gen_id'] = time.time() 
             
-        st.info(f"**Penjelasan Konsep:**\n{st.session_state['info']}")
+        except Exception as e:
+            st.error(f"Kesalahan Generate: {e}")
 
 # 5. TAMPILAN
-if 'soal' in st.session_state:
+if 'vis_soal' in st.session_state:
     st.divider()
-    st.subheader("📋 Pertanyaan")
-    st.write(st.session_state['soal'])
     
-    if st.button("Tampilkan Jawaban & Solusi"):
+    # Menampilkan Diagram
+    st.subheader("🌐 Network Topology")
+    st.code(st.session_state['vis_topologi'], language="text")
+    
+    # Menampilkan Soal
+    st.subheader("📋 Pertanyaan")
+    st.write(st.session_state['vis_soal'])
+    
+    # Tombol jawaban dengan KEY UNIK (menggunakan gen_id)
+    key_tombol = f"btn_jawab_{st.session_state.get('gen_id', '0')}"
+    
+    if st.button("Tampilkan Jawaban & Solusi", key=key_tombol):
         st.success("✅ Kunci Jawaban / Langkah Konfigurasi:")
-        # Jika tipe praktek, tampilkan sebagai kode CLI
-        if st.session_state.get('tipe_lalu') == "Praktek / Lab":
-            st.code(st.session_state['kunci'], language="bash")
+        if st.session_state.get('vis_tipe') == "Praktek / Lab":
+            st.code(st.session_state['vis_kunci'], language="bash")
         else:
-            st.write(st.session_state['kunci'])
-            
-        st.info(f"**Penjelasan Konsep:**\n{st.session_state['info']}")
+            st.write(st.session_state['vis_kunci'])
+        st.info(f"**Penjelasan:**\n{st.session_state['vis_info']}")
 
-    if st.button("Hapus"):
-        for key in list(st.session_state.keys()): del st.session_state[key]
+    # Tombol reset dengan KEY UNIK
+    if st.button("Hapus & Reset", key=f"reset_{st.session_state.get('gen_id', '0')}"):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
         st.rerun()
