@@ -32,44 +32,59 @@ with st.sidebar:
     st.divider()
     generate_btn = st.button("Generate Soal Sekarang 🚀", use_container_width=True)
 
-# 4. LOGIKA GENERATE
+# 4. LOGIKA GENERATE (VERSI ANTI-ERROR)
 if generate_btn and topik:
     with st.spinner("AI sedang merancang soal praktek..."):
-        # Logika Prompt Berdasarkan Tipe
+        # Memberikan batasan agar AI tidak bicara terlalu panjang yang memicu "Unterminated String"
         if tipe == "Pilihan Ganda":
-            instruction = "Buatkan soal pilihan ganda dengan 4 opsi (A, B, C, D)."
+            instruction = "Buatkan soal pilihan ganda dengan 4 opsi. Berikan penjelasan singkat."
         else:
-            instruction = """Buatkan soal PRAKTEK/STUDI KASUS murni. 
-            JANGAN berikan pilihan ganda. 
-            Berikan skenario masalah, tujuan konfigurasi, dan instruksi langkah demi langkah. 
-            Kunci jawaban harus berisi urutan perintah (CLI) atau solusi teknis detail."""
+            instruction = """Buatkan soal PRAKTEK/LAB. 
+            Fokus pada skenario konfigurasi. 
+            Sajikan solusi CLI secara ringkas dan padat."""
 
         prompt = f"""
-        Bertindaklah sebagai instruktur IT senior. {instruction}
-        Buatkan {jumlah} soal tentang {topik} tingkat {tingkat}.
+        Instruktur IT: {instruction}
+        Topik: {topik} | Level: {tingkat} | Jumlah: {jumlah}
         
-        Format output HARUS JSON murni:
+        WAJIB OUTPUT JSON MURNI:
         {{
           "soal_list": [
             {{
-              "tanya": "isi pertanyaan atau skenario lab",
+              "tanya": "skenario",
               "opsi": [], 
-              "kunci": "langkah konfigurasi atau jawaban benar",
-              "info": "penjelasan konsep"
+              "kunci": "langkah CLI ringkas",
+              "info": "konsep"
             }}
           ]
         }}
+        JANGAN memutus kalimat. Jika jawaban panjang, gunakan poin-poin singkat.
         """
+        
         try:
-            response = model.generate_content(prompt)
+            # Gunakan parameter tambahan untuk mengontrol kreativitas (temperature)
+            response = model.generate_content(prompt, generation_config={"temperature": 0.2})
             txt = response.text.strip()
-            if "```json" in txt: txt = txt.split("```json")[1].split("```")[0].strip()
-            elif "```" in txt: txt = txt.split("```")[1].split("```")[0].strip()
             
-            st.session_state['data_soal'] = json.loads(txt)['soal_list']
+            # Pembersihan JSON yang lebih kuat
+            if "```json" in txt:
+                txt = txt.split("```json")[1].split("```")[0].strip()
+            elif "```" in txt:
+                txt = txt.split("```")[1].split("```")[0].strip()
+            
+            # Perbaikan otomatis untuk karakter newline yang sering merusak JSON
+            txt = txt.replace('\n', ' ') 
+            
+            data_json = json.loads(txt)
+            st.session_state['data_soal'] = data_json['soal_list']
             st.session_state['tipe_aktif'] = tipe
+            st.rerun() # Refresh untuk menampilkan hasil
+            
+        except json.JSONDecodeError as je:
+            st.error(f"Format data dari AI tidak sempurna. Coba klik tombol Generate lagi.")
+            st.debug(f"Detail error: {je}")
         except Exception as e:
-            st.error(f"Gagal memproses soal: {e}")
+            st.error(f"Terjadi kesalahan: {e}")
 # --- 5. DISPLAY SOAL (VERSI AMAN) ---
 st.title("📝 AI Question Generator")
 
