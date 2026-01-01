@@ -27,52 +27,54 @@ with st.sidebar:
     tipe = st.radio("Tipe Soal:", ["Pilihan Ganda", "Praktek / Studi Kasus"])
     generate_btn = st.button("Generate Soal 🚀", use_container_width=True)
 
-# 4. LOGIKA GENERATE
+
+# 4. LOGIKA GENERATE (VERSI ANTI-BAD-JSON)
 if generate_btn and topik:
     with st.spinner("AI sedang merancang soal..."):
-        # Prompt lebih ketat agar JSON tidak rusak
-        if tipe == "Pilihan Ganda":
-            instruction = "Buat soal pilihan ganda (A,B,C,D)."
-        else:
-            instruction = "Buat soal LAB PRAKTEK. Kunci jawaban berisi urutan perintah CLI yang lengkap."
-
+        # Kita pertegas agar AI tidak memberikan penjelasan di luar JSON
         prompt = f"""
-        Instruktur IT: {instruction}
-        Topik: {topik} | Jumlah: {jumlah}
+        Tugas: Buat {jumlah} soal {tipe} tentang {topik}.
+        Format: JSON MURNI. 
+        PENTING: Jangan gunakan tanda kutip ganda (") di dalam nilai pertanyaan atau kunci, gunakan tanda kutip tunggal (') saja agar JSON tidak rusak.
         
-        WAJIB JSON MURNI:
+        Output harus mengikuti struktur ini:
         {{
           "soal_list": [
             {{
-              "tanya": "pertanyaan",
+              "tanya": "skenario lab atau pertanyaan",
               "opsi": ["A", "B", "C", "D"],
-              "kunci": "jawaban",
+              "kunci": "perintah CLI atau jawaban",
               "info": "penjelasan"
             }}
           ]
         }}
-        Catatan: Gunakan escape character untuk tanda kutip di dalam string. JANGAN memutus JSON.
+        Hanya kirimkan JSON, jangan ada kata-kata pembuka.
         """
         
         try:
+            # Gunakan response_mime_type jika library mendukung, atau manual cleaning
             response = model.generate_content(prompt)
             txt = response.text.strip()
             
-            # Pembersihan JSON yang lebih aman
-            if "```json" in txt:
-                txt = txt.split("```json")[1].split("```")[0].strip()
-            elif "```" in txt:
-                txt = txt.split("```")[1].split("```")[0].strip()
-            
-            # Parsing JSON
-            data_json = json.loads(txt)
+            # PEMBERSIHAN EKSTRIM
+            # Cari posisi awal '{' dan akhir '}' untuk membuang teks sampah dari AI
+            start_idx = txt.find('{')
+            end_idx = txt.rfind('}') + 1
+            if start_idx != -1 and end_idx != -1:
+                json_string = txt[start_idx:end_idx]
+            else:
+                json_string = txt
+
+            # Parsing data
+            data_json = json.loads(json_string)
             st.session_state['data_soal'] = data_json['soal_list']
             st.session_state['tipe_aktif'] = tipe
             st.rerun()
             
         except Exception as e:
-            st.error("⚠️ AI memberikan format data yang tidak stabil. Silakan klik 'Generate' lagi.")
-            # st.exception(e) # Aktifkan ini jika ingin melihat detail error asli
+            st.warning("⚠️ AI sedang sibuk atau format teks terputus.")
+            st.info("Saran: Kurangi 'Jumlah Soal' menjadi 1 atau 2 agar AI tidak mengirim teks terlalu panjang.")
+            # st.error(f"Debug: {str(e)[:100]}") # Opsional untuk melihat error singkat
 
 # 5. DISPLAY
 st.title("📝 AI Question Generator")
