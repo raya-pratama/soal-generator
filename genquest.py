@@ -38,13 +38,13 @@ if generate_btn and topik:
             detail_instruksi = "Buat soal LAB PRAKTEK tanpa pilihan ganda. Fokus pada skenario konfigurasi."
 
         prompt = f"""
-        Bertindaklah sebagai instruktur Cisco bersertifikat.
+        Bertindaklah sebagai instruktur Ahli di Bidang Jaringan.
         Tugas: Buat 1 soal {tipe} tentang {topik}.
         
         WAJIB GUNAKAN FORMAT INI:
         
         [TOPOLOGI]
-        (Gambarkan diagram kabel/koneksi antar perangkat menggunakan ASCII)
+        (Jika praktek, Gambarkan diagram kabel/koneksi antar perangkat menggunakan ASCII. jika pilihan ganda tidak usah)
         
         [PERTANYAAN]
         (Tuliskan soalnya di sini. {detail_instruksi})
