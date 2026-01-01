@@ -4,12 +4,13 @@ import json
 
 # --- KONFIGURASI KEAMANAN ---
 # Mengambil API Key dari Streamlit Secrets
-try:
-    api_key = st.secrets["AIzaSyAveeukLXf5-A2bf4A3vfb5bm9nhmZlUC8"] 
+if "GEMINI_API_KEY" in st.secrets:
+    api_key = st.secrets["AIzaSyAveeukLXf5-A2bf4A3vfb5bm9nhmZlUC8"]
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-1.5-flash')
-except Exception as e:
-    st.error("API Key belum disetting di Streamlit Secrets atau terjadi kesalahan konfigurasi.")
+else:
+    st.error("❌ API Key tidak ditemukan di Secrets!")
+    st.info("Buka Settings > Secrets di Streamlit Cloud, lalu masukkan: GEMINI_API_KEY = 'KODE_ANDA'")
     st.stop()
 
 # --- TAMPILAN ---
