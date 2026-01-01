@@ -2,79 +2,104 @@ import streamlit as st
 import google.generativeai as genai
 import json
 
-# --- KONFIGURASI KEAMANAN ---
-# Mengambil API Key dari Streamlit Secrets
-try:
-    # Kita menyuruh Streamlit mencari laci bernama "GEMINI_API_KEY"
-    api_key = st.secrets["GEMINI_API_KEY"]
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-pro')
-except Exception as e:
-    st.error("❌ Key 'GEMINI_API_KEY' tidak ditemukan di Settings aplikasi!")
+# 1. KONFIGURASI HALAMAN
+st.set_page_config(page_title="AI Exam Maker", page_icon="📝", layout="centered")
+
+# 2. SISTEM KEAMANAN (SECRETS)
+if "GEMINI_API_KEY" in st.secrets:
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # Gunakan gemini-1.5-flash sebagai utama, jika gagal sistem akan otomatis handle
+        model = genai.GenerativeModel('gemini-1.5-flash')
+    except Exception as e:
+        st.error(f"Koneksi AI Gagal: {e}")
+        st.stop()
+else:
+    st.error("❌ API Key tidak ditemukan! Masukkan GEMINI_API_KEY di Settings > Secrets.")
     st.stop()
 
-# --- TAMPILAN ---
-st.set_page_config(page_title="AI Exam Maker", page_icon="📝")
+# 3. ANTARMUKA UTAMA
 st.title("📝 AI Question Generator")
-st.write("Buat soal latihan Cisco, Koding, atau Teori apapun secara otomatis.")
+st.write("Buat soal latihan otomatis hanya dengan menuliskan topiknya.")
 
-# --- SIDEBAR INPUT ---
 with st.sidebar:
-    st.header("⚙️ Pengaturan")
-    topik = st.text_area("Detail Materi/Topik:", placeholder="Contoh: Konfigurasi Static Routing di Cisco Packet Tracer")
+    st.header("⚙️ Pengaturan Soal")
+    topik = st.text_area("Masukkan Topik/Materi:", placeholder="Contoh: Konfigurasi Static Routing Cisco Packet Tracer", height=150)
     jumlah = st.slider("Jumlah Soal:", 1, 10, 3)
     tingkat = st.selectbox("Tingkat Kesulitan:", ["Dasar", "Menengah", "Lanjut"])
-    tipe = st.selectbox("Tipe Soal:", ["Pilihan Ganda", "Soal Praktek/Case Study"])
+    tipe = st.selectbox("Tipe Soal:", ["Pilihan Ganda", "Case Study / Praktek"])
     
     generate_btn = st.button("Buat Soal Sekarang 🚀")
 
-# --- PROMPT LOGIC ---
+# 4. LOGIKA GENERATOR
 if generate_btn and topik:
-    with st.spinner("AI sedang berpikir..."):
+    with st.spinner("AI sedang merancang soal..."):
+        # Prompt yang diperketat agar AI selalu membalas dengan JSON murni
         prompt = f"""
-        Bertindaklah sebagai instruktur ahli. Buatlah {jumlah} soal {tipe} tentang {topik} tingkat {tingkat}.
-        WAJIB berikan jawaban benar dan penjelasan teknisnya.
-        Format output HARUS JSON murni:
+        Bertindaklah sebagai instruktur IT ahli. Buatlah {jumlah} soal {tipe} tentang {topik} tingkat {tingkat}.
+        WAJIB memberikan jawaban benar dan penjelasan teknis yang akurat.
+        
+        FORMAT OUTPUT HARUS JSON MURNI (tanpa teks pembuka/penutup):
         {{
           "list_soal": [
             {{
-              "tanya": "pertanyaan",
+              "tanya": "teks pertanyaan",
               "opsi": ["A", "B", "C", "D"],
-              "kunci": "jawaban benar",
-              "info": "penjelasan"
+              "kunci": "isi jawaban yang benar",
+              "info": "penjelasan singkat"
             }}
           ]
         }}
         """
+        
         try:
             response = model.generate_content(prompt)
-            # Membersihkan tag markdown jika ada
-            clean_text = response.text.strip().replace('```json', '').replace('```', '')
-            st.session_state['data_kuis'] = json.loads(clean_text)['list_soal']
+            # Pembersihan string JSON dari tag markdown (```json ... ```)
+            res_text = response.text.strip()
+            if "```json" in res_text:
+                res_text = res_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in res_text:
+                res_text = res_text.split("```")[1].split("```")[0].strip()
+            
+            # Parsing JSON ke Python Dictionary
+            data_hasil = json.loads(res_text)
+            st.session_state['data_kuis'] = data_hasil['list_soal']
+            st.success("Berhasil membuat soal!")
+            
         except Exception as e:
             st.error(f"Gagal memproses AI: {e}")
+            st.info("Tips: Coba klik tombol 'Buat Soal' sekali lagi jika terjadi error timeout.")
 
-# --- DISPLAY SOAL ---
+# 5. TAMPILAN SOAL & CEK JAWABAN
 if 'data_kuis' in st.session_state:
+    st.divider()
     for idx, s in enumerate(st.session_state['data_kuis']):
-        with st.expander(f"Soal {idx+1}: {s['tanya'][:50]}...", expanded=True):
-            st.write(f"**{s['tanya']}**")
+        with st.container():
+            st.markdown(f"### Soal {idx+1}")
+            st.write(s['tanya'])
             
-            if "opsi" in s and s["opsi"]:
-                user_ans = st.radio(f"Pilih jawaban:", s['opsi'], key=f"ans_{idx}")
-                if st.button(f"Cek Jawaban #{idx+1}"):
+            # Logika Pilihan Ganda
+            if "opsi" in s and s["opsi"] and len(s["opsi"]) > 0:
+                user_ans = st.radio(f"Pilih jawaban untuk nomor {idx+1}:", s['opsi'], key=f"ans_{idx}")
+                
+                if st.button(f"Cek Jawaban No {idx+1}", key=f"btn_{idx}"):
                     if user_ans == s['kunci']:
-                        st.success(f"Tepat! Jawaban: {s['kunci']}")
+                        st.success(f"Tepat sekali! ✅")
                     else:
                         st.error(f"Kurang tepat. Jawaban benar: {s['kunci']}")
                     st.info(f"**Penjelasan:** {s['info']}")
+            
+            # Logika Case Study (Praktek)
             else:
-                # Untuk soal praktek tanpa pilihan ganda
-                st.warning("Tipe Praktek: Silakan kerjakan di simulator, lalu klik kunci untuk verifikasi.")
-                if st.button(f"Lihat Kunci Praktek #{idx+1}"):
-                    st.write(f"**Langkah/Jawaban:** {s['kunci']}")
-                    st.info(f"**Tips:** {s['info']}")
+                st.info("💡 Ini adalah soal praktek. Kerjakan di simulator Anda.")
+                if st.button(f"Lihat Kunci & Langkah No {idx+1}", key=f"btn_{idx}"):
+                    st.write(f"**Jawaban/Langkah:** {s['kunci']}")
+                    st.write(f"**Tips:** {s['info']}")
+            
+            st.divider()
 
-    if st.button("Reset / Buat Baru"):
+    if st.button("🗑️ Hapus & Buat Baru"):
         del st.session_state['data_kuis']
         st.rerun()
+
+st.caption("AI Trader & Exam Maker © 2024 - Menggunakan Google Gemini API")
