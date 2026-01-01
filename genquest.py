@@ -70,22 +70,26 @@ if generate_btn and topik:
             st.session_state['tipe_aktif'] = tipe
         except Exception as e:
             st.error(f"Gagal memproses soal: {e}")
-
-# 5. DISPLAY SOAL
+# --- 5. DISPLAY SOAL (VERSI AMAN) ---
 st.title("📝 AI Question Generator")
 
 if 'data_soal' in st.session_state:
+    # Cek apakah tipe_aktif ada, jika tidak ada beri nilai default
+    tipe_sekarang = st.session_state.get('tipe_aktif', 'Pilihan Ganda')
+    
     for i, s in enumerate(st.session_state['data_soal']):
         with st.expander(f"Soal Nomor {i+1}", expanded=True):
             st.write(f"### Pertanyaan/Skenario:")
             st.write(s['tanya'])
             
-            # Tampilan jika Pilihan Ganda
-            if st.session_state['tipe_aktif'] == "Pilihan Ganda" and s.get('opsi'):
+            # Tampilan jika Pilihan Ganda (Menggunakan variabel tipe_sekarang yang aman)
+            if tipe_sekarang == "Pilihan Ganda" and s.get('opsi'):
                 pilihan = st.radio("Pilih jawaban:", s['opsi'], key=f"r_{i}")
                 if st.button(f"Cek Jawaban {i+1}", key=f"b_{i}"):
-                    if pilihan == s['kunci']: st.success(f"BENAR! ✅")
-                    else: st.error(f"SALAH! Kunci: {s['kunci']}")
+                    if pilihan == s['kunci']: 
+                        st.success(f"BENAR! ✅")
+                    else: 
+                        st.error(f"SALAH! Kunci: {s['kunci']}")
                     st.info(f"**Penjelasan:** {s['info']}")
             
             # Tampilan jika Praktek
@@ -93,9 +97,12 @@ if 'data_soal' in st.session_state:
                 st.info("🛠️ **Tugas Praktek:** Kerjakan skenario di atas pada simulator (Cisco Packet Tracer/GNS3).")
                 if st.button(f"Lihat Kunci Konfigurasi {i+1}", key=f"b_{i}"):
                     st.markdown("### 🔑 Solusi / Langkah Konfigurasi:")
-                    st.code(s['kunci']) # Menggunakan format code agar CLI rapi
+                    # Menampilkan CLI dengan format code block agar rapi
+                    st.code(s['kunci'], language="bash") 
                     st.info(f"**Konsep Dasar:** {s['info']}")
 
     if st.button("🗑️ Hapus & Reset"):
-        del st.session_state['data_soal']
+        # Menghapus semua state agar bersih kembali
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.rerun()
