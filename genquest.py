@@ -27,36 +27,68 @@ with st.sidebar:
     tipe = st.radio("Tipe Soal:", ["Pilihan Ganda", "Praktek / Lab"])
     generate_btn = st.button("Generate Soal 🚀")
 
-# 4. LOGIKA GENERATE (TANPA JSON - ANTI ERROR)
+# 4. LOGIKA GENERATE (DENGAN DIAGRAM TOPOLOGI)
 if generate_btn and topik:
-    with st.spinner("AI sedang menulis soal..."):
-        # Kita minta AI menulis dengan pemisah khusus "###"
+    with st.spinner("AI sedang merancang soal dan topologi..."):
         prompt = f"""
         Buatkan 1 soal {tipe} tentang {topik}.
         Tuliskan dengan format persis seperti ini:
-        PERTANYAAN: (isi pertanyaan di sini)
+        
+        TOPOLOGI:
+        (Buat diagram jaringan sederhana menggunakan karakter ASCII/Teks, contoh: [R1]--f0/0--[R2])
+        
         ###
-        JAWABAN: (isi kunci jawaban atau langkah CLI di sini)
+        PERTANYAAN: 
+        (isi pertanyaan atau skenario lab di sini)
+        
         ###
-        PENJELASAN: (isi penjelasan singkat di sini)
+        JAWABAN: 
+        (isi kunci jawaban atau langkah CLI di sini)
+        
+        ###
+        PENJELASAN: 
+        (isi penjelasan singkat di sini)
         """
         
         try:
             response = model.generate_content(prompt)
             hasil_teks = response.text
             
-            # Memotong teks berdasarkan pemisah ###
+            # Membagi teks menjadi 4 bagian
             bagian = hasil_teks.split("###")
             
-            if len(bagian) >= 3:
-                st.session_state['soal'] = bagian[0].replace("PERTANYAAN:", "").strip()
-                st.session_state['kunci'] = bagian[1].replace("JAWABAN:", "").strip()
-                st.session_state['info'] = bagian[2].replace("PENJELASAN:", "").strip()
+            if len(bagian) >= 4:
+                st.session_state['topologi'] = bagian[0].replace("TOPOLOGI:", "").strip()
+                st.session_state['soal'] = bagian[1].replace("PERTANYAAN:", "").strip()
+                st.session_state['kunci'] = bagian[2].replace("JAWABAN:", "").strip()
+                st.session_state['info'] = bagian[3].replace("PENJELASAN:", "").strip()
                 st.session_state['tipe_lalu'] = tipe
+                st.rerun()
             else:
-                st.error("AI memberikan format yang salah, coba klik Generate lagi.")
+                st.error("Format AI kurang lengkap, silakan klik Generate lagi.")
         except Exception as e:
             st.error(f"Kesalahan: {e}")
+
+# 5. TAMPILAN (DENGAN VISUALISASI)
+if 'soal' in st.session_state:
+    st.divider()
+    
+    # Menampilkan Diagram Topologi
+    if st.session_state.get('topologi'):
+        st.subheader("🌐 Network Topology")
+        st.code(st.session_state['topologi'], language="text")
+    
+    st.subheader("📋 Pertanyaan")
+    st.write(st.session_state['soal'])
+    
+    if st.button("Tampilkan Jawaban & Solusi"):
+        st.success("✅ Kunci Jawaban / Langkah Konfigurasi:")
+        if st.session_state.get('tipe_lalu') == "Praktek / Lab":
+            st.code(st.session_state['kunci'], language="bash")
+        else:
+            st.write(st.session_state['kunci'])
+            
+        st.info(f"**Penjelasan Konsep:**\n{st.session_state['info']}")
 
 # 5. TAMPILAN
 if 'soal' in st.session_state:
