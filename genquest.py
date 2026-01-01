@@ -1,103 +1,79 @@
 import streamlit as st
 import google.generativeai as genai
-import json
 
-# 1. KONFIGURASI
-st.set_page_config(page_title="AI Exam Generator", page_icon="📝", layout="wide")
+# 1. KONFIGURASI DASAR
+st.set_page_config(page_title="AI Generator Soal", layout="centered")
+st.title("📝 AI Question Generator (Pro)")
 
-# 2. API & MODEL
+# 2. KONEKSI API
 if "GEMINI_API_KEY" in st.secrets:
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        selected = 'gemini-1.5-flash' if 'models/gemini-1.5-flash' in models else 'gemini-pro'
-        model = genai.GenerativeModel(selected)
+        # Mencari model yang tersedia secara otomatis
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        model_name = available_models[0].replace('models/', '')
+        model = genai.GenerativeModel(model_name)
     except Exception as e:
         st.error(f"Koneksi Gagal: {e}")
         st.stop()
 else:
-    st.error("API Key belum diset di Secrets!")
+    st.error("API Key belum disetting di Secrets!")
     st.stop()
 
-# 3. SIDEBAR
+# 3. INPUT USER
 with st.sidebar:
     st.header("⚙️ Pengaturan")
-    topik = st.text_area("Topik Materi:", placeholder="Contoh: Konfigurasi EIGRP Cisco", height=100)
-    jumlah = st.slider("Jumlah Soal:", 1, 5, 2)
-    tipe = st.radio("Tipe Soal:", ["Pilihan Ganda", "Praktek / Studi Kasus"])
-    generate_btn = st.button("Generate Soal 🚀", use_container_width=True)
+    topik = st.text_input("Topik (Contoh: VLAN Cisco):")
+    tipe = st.radio("Tipe Soal:", ["Pilihan Ganda", "Praktek / Lab"])
+    generate_btn = st.button("Generate Soal 🚀")
 
-
-# 4. LOGIKA GENERATE (VERSI ANTI-BAD-JSON)
+# 4. LOGIKA GENERATE (TANPA JSON - ANTI ERROR)
 if generate_btn and topik:
-    with st.spinner("AI sedang merancang soal..."):
-        # Kita pertegas agar AI tidak memberikan penjelasan di luar JSON
+    with st.spinner("AI sedang menulis soal..."):
+        # Kita minta AI menulis dengan pemisah khusus "###"
         prompt = f"""
-        Tugas: Buat {jumlah} soal {tipe} tentang {topik}.
-        Format: JSON MURNI. 
-        PENTING: Jangan gunakan tanda kutip ganda (") di dalam nilai pertanyaan atau kunci, gunakan tanda kutip tunggal (') saja agar JSON tidak rusak.
-        
-        Output harus mengikuti struktur ini:
-        {{
-          "soal_list": [
-            {{
-              "tanya": "skenario lab atau pertanyaan",
-              "opsi": ["A", "B", "C", "D"],
-              "kunci": "perintah CLI atau jawaban",
-              "info": "penjelasan"
-            }}
-          ]
-        }}
-        Hanya kirimkan JSON, jangan ada kata-kata pembuka.
+        Buatkan 1 soal {tipe} tentang {topik}.
+        Tuliskan dengan format persis seperti ini:
+        PERTANYAAN: (isi pertanyaan di sini)
+        ###
+        JAWABAN: (isi kunci jawaban atau langkah CLI di sini)
+        ###
+        PENJELASAN: (isi penjelasan singkat di sini)
         """
         
         try:
-            # Gunakan response_mime_type jika library mendukung, atau manual cleaning
             response = model.generate_content(prompt)
-            txt = response.text.strip()
+            hasil_teks = response.text
             
-            # PEMBERSIHAN EKSTRIM
-            # Cari posisi awal '{' dan akhir '}' untuk membuang teks sampah dari AI
-            start_idx = txt.find('{')
-            end_idx = txt.rfind('}') + 1
-            if start_idx != -1 and end_idx != -1:
-                json_string = txt[start_idx:end_idx]
+            # Memotong teks berdasarkan pemisah ###
+            bagian = hasil_teks.split("###")
+            
+            if len(bagian) >= 3:
+                st.session_state['soal'] = bagian[0].replace("PERTANYAAN:", "").strip()
+                st.session_state['kunci'] = bagian[1].replace("JAWABAN:", "").strip()
+                st.session_state['info'] = bagian[2].replace("PENJELASAN:", "").strip()
+                st.session_state['tipe_lalu'] = tipe
             else:
-                json_string = txt
-
-            # Parsing data
-            data_json = json.loads(json_string)
-            st.session_state['data_soal'] = data_json['soal_list']
-            st.session_state['tipe_aktif'] = tipe
-            st.rerun()
-            
+                st.error("AI memberikan format yang salah, coba klik Generate lagi.")
         except Exception as e:
-            st.warning("⚠️ AI sedang sibuk atau format teks terputus.")
-            st.info("Saran: Kurangi 'Jumlah Soal' menjadi 1 atau 2 agar AI tidak mengirim teks terlalu panjang.")
-            # st.error(f"Debug: {str(e)[:100]}") # Opsional untuk melihat error singkat
+            st.error(f"Kesalahan: {e}")
 
-# 5. DISPLAY
-st.title("📝 AI Question Generator")
-
-if 'data_soal' in st.session_state:
-    tipe_sekarang = st.session_state.get('tipe_aktif', 'Pilihan Ganda')
+# 5. TAMPILAN
+if 'soal' in st.session_state:
+    st.divider()
+    st.subheader("📋 Pertanyaan")
+    st.write(st.session_state['soal'])
     
-    for i, s in enumerate(st.session_state['data_soal']):
-        with st.expander(f"Soal Nomor {i+1}", expanded=True):
-            st.write(f"**Pertanyaan:**\n{s['tanya']}")
+    if st.button("Tampilkan Jawaban & Solusi"):
+        st.success("✅ Kunci Jawaban / Langkah Konfigurasi:")
+        # Jika tipe praktek, tampilkan sebagai kode CLI
+        if st.session_state.get('tipe_lalu') == "Praktek / Lab":
+            st.code(st.session_state['kunci'], language="bash")
+        else:
+            st.write(st.session_state['kunci'])
             
-            if tipe_sekarang == "Pilihan Ganda" and s.get('opsi'):
-                ans = st.radio("Pilih jawaban:", s['opsi'], key=f"ans_{i}")
-                if st.button(f"Cek Jawaban {i+1}", key=f"btn_{i}"):
-                    if ans == s['kunci']: st.success("Benar! ✅")
-                    else: st.error(f"Salah! Kunci: {s['kunci']}")
-                    st.info(f"**Info:** {s['info']}")
-            else:
-                st.info("🛠️ **Skenario Lab:** Kerjakan pada simulator.")
-                if st.button(f"Lihat Kunci Konfigurasi {i+1}", key=f"btn_{i}"):
-                    st.code(s['kunci'], language="bash")
-                    st.info(f"**Info:** {s['info']}")
+        st.info(f"**Penjelasan Konsep:**\n{st.session_state['info']}")
 
-    if st.button("🗑️ Reset"):
+    if st.button("Hapus"):
         for key in list(st.session_state.keys()): del st.session_state[key]
         st.rerun()
