@@ -28,49 +28,55 @@ with st.sidebar:
     # Gunakan key unik untuk tombol generate
     generate_btn = st.button("Generate Soal 🚀", key="main_generate_btn")
 
-# 4. LOGIKA GENERATE
+# 4. LOGIKA GENERATE (PROMPT DIPERBAIKI)
 if generate_btn and topik:
-    with st.spinner("AI sedang merancang soal dan topologi..."):
-        # Kita minta AI menggunakan penanda yang lebih kaku agar split tidak gagal
+    with st.spinner("AI sedang merancang soal..."):
+        # Instruksi spesifik agar pilihan ganda tidak hilang
+        if tipe == "Pilihan Ganda":
+            detail_instruksi = "Buat soal pilihan ganda dengan 4 opsi (A, B, C, D) di bagian [PERTANYAAN]."
+        else:
+            detail_instruksi = "Buat soal LAB PRAKTEK tanpa pilihan ganda. Fokus pada skenario konfigurasi."
+
         prompt = f"""
-        Buatkan 1 soal {tipe} tentang {topik}.
-        Gunakan format pemisah [BAGIAN] agar sistem tidak error.
+        Bertindaklah sebagai instruktur Cisco bersertifikat.
+        Tugas: Buat 1 soal {tipe} tentang {topik}.
+        
+        WAJIB GUNAKAN FORMAT INI:
         
         [TOPOLOGI]
-        (Buat diagram ASCII jaringan)
+        (Gambarkan diagram kabel/koneksi antar perangkat menggunakan ASCII)
         
         [PERTANYAAN]
-        (Isi soal atau skenario)
+        (Tuliskan soalnya di sini. {detail_instruksi})
         
         [JAWABAN]
-        (Isi kunci jawaban atau CLI)
+        (Jika Pilihan Ganda, tulis huruf jawabannya saja. Jika Praktek, tulis perintah CLI-nya.)
         
         [PENJELASAN]
-        (Isi penjelasan singkat)
+        (Berikan penjelasan teknis singkat kenapa jawaban itu benar)
         """
         
         try:
             response = model.generate_content(prompt)
             txt = response.text
             
-            # Fungsi potong teks yang lebih aman
             def ambil_bagian(tag, teks):
                 try:
+                    # Mencari teks di antara [TAG] dan [TAG berikutnya]
                     return teks.split(f"[{tag}]")[1].split("[")[0].strip()
                 except:
-                    return f"Bagian {tag} tidak tergenerasi dengan sempurna."
+                    return f"Data {tag} tidak tersedia."
 
             st.session_state['vis_topologi'] = ambil_bagian("TOPOLOGI", txt)
             st.session_state['vis_soal'] = ambil_bagian("PERTANYAAN", txt)
             st.session_state['vis_kunci'] = ambil_bagian("JAWABAN", txt)
             st.session_state['vis_info'] = ambil_bagian("PENJELASAN", txt)
             st.session_state['vis_tipe'] = tipe
-            # Gunakan timestamp agar ID selalu unik setelah generate
-            st.session_state['gen_id'] = time.time() 
+            st.session_state['gen_id'] = time.time()
+            st.rerun() # Ditambahkan agar langsung muncul setelah klik
             
         except Exception as e:
             st.error(f"Kesalahan Generate: {e}")
-
 # 5. TAMPILAN
 if 'vis_soal' in st.session_state:
     st.divider()
