@@ -2,82 +2,70 @@ import streamlit as st
 import google.generativeai as genai
 import json
 
-# 1. SETTING HALAMAN
-st.set_page_config(page_title="AI Exam Maker", page_icon="📝")
+# --- KONFIGURASI HALAMAN ---
+st.set_page_config(page_title="AI Soal Generator", page_icon="📝")
 st.title("📝 AI Question Generator")
 
-# 2. KONFIGURASI API & MODEL
+# --- KONEKSI API ---
 if "GEMINI_API_KEY" in st.secrets:
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        
-        # Logika memilih model secara otomatis (Fallback)
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        if 'models/gemini-1.5-flash' in available_models:
-            model_name = 'gemini-1.5-flash'
-        else:
-            model_name = 'gemini-pro'
-            
-        model = genai.GenerativeModel(model_name)
+        # Menggunakan gemini-pro karena paling stabil dan jarang error 404
+        model = genai.GenerativeModel('gemini-pro')
     except Exception as e:
-        st.error(f"Koneksi ke Google AI Gagal: {e}")
+        st.error(f"Koneksi Gagal: {e}")
         st.stop()
 else:
-    st.error("❌ API Key tidak ditemukan di Secrets!")
+    st.error("API Key tidak ditemukan di Secrets!")
     st.stop()
 
-# 3. INPUT USER
+# --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Pengaturan")
-    topik = st.text_area("Topik Materi:", placeholder="Contoh: Dasar-dasar Routing Cisco")
-    jumlah = st.slider("Jumlah Soal:", 1, 10, 3)
-    tingkat = st.selectbox("Kesulitan:", ["Dasar", "Menengah", "Lanjut"])
-    tipe = st.selectbox("Jenis:", ["Pilihan Ganda", "Praktek"])
-    generate_btn = st.button("Generate Soal 🚀")
+    topik = st.text_input("Topik Materi:", placeholder="Contoh: VLAN Cisco")
+    jumlah = st.slider("Jumlah Soal:", 1, 5, 3)
+    generate_btn = st.button("Buat Soal 🚀")
 
-# 4. PROSES AI
+# --- LOGIKA GENERATE ---
 if generate_btn and topik:
-    with st.spinner(f"Sedang membuat soal menggunakan {model_name}..."):
+    with st.spinner("AI sedang bekerja..."):
         prompt = f"""
-        Buat {jumlah} soal {tipe} tentang {topik} tingkat {tingkat}.
-        Output harus JSON murni:
+        Buat {jumlah} soal pilihan ganda tentang {topik}.
+        Berikan jawaban dan penjelasan.
+        Format harus JSON:
         {{
-          "list_soal": [
-            {{
-              "tanya": "...",
-              "opsi": ["A", "B", "C", "D"],
-              "kunci": "...",
-              "info": "..."
-            }}
+          "list": [
+            {{"tanya": "..", "opsi": ["A", "B", "C", "D"], "kunci": "..", "info": ".."}}
           ]
         }}
         """
         try:
             response = model.generate_content(prompt)
-            res_text = response.text
-            # Pembersihan JSON
-            if "```json" in res_text:
-                res_text = res_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in res_text:
-                res_text = res_text.split("```")[1].split("```")[0].strip()
+            # Membersihkan teks agar hanya mengambil bagian JSON
+            teks_asli = response.text
+            mulai = teks_asli.find('{')
+            akhir = teks_asli.rfind('}') + 1
+            json_clean = teks_asli[mulai:akhir]
             
-            st.session_state['data_soal'] = json.loads(res_text)['list_soal']
+            st.session_state['soal_ai'] = json.loads(json_clean)['list']
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Terjadi kesalahan teknis: {e}")
+            st.info("Coba klik tombol 'Buat Soal' lagi.")
 
-# 5. TAMPILKAN SOAL
-if 'data_soal' in st.session_state:
-    for i, s in enumerate(st.session_state['data_soal']):
-        st.subheader(f"Soal {i+1}")
-        st.write(s['tanya'])
+# --- TAMPILAN SOAL ---
+if 'soal_ai' in st.session_state:
+    for i, s in enumerate(st.session_state['soal_ai']):
+        st.write(f"**{i+1}. {s['tanya']}**")
+        pilihan = st.radio(f"Pilih jawaban {i+1}:", s['opsi'], key=f"user_{i}")
         
-        if "opsi" in s and s["opsi"]:
-            ans = st.radio("Pilih jawaban:", s['opsi'], key=f"q_{i}")
-            if st.button(f"Cek Jawaban {i+1}"):
-                if ans == s['kunci']:
-                    st.success("Benar! 🎉")
-                else:
-                    st.error(f"Salah. Jawaban: {s['kunci']}")
-                st.info(f"Penjelasan: {s['info']}")
+        if st.button(f"Cek Nomor {i+1}", key=f"cek_{i}"):
+            if pilihan == s['kunci']:
+                st.success("Benar! 🎉")
+            else:
+                st.error(f"Salah. Kunci: {s['kunci']}")
+            st.info(f"Info: {s['info']}")
         st.divider()
+
+    if st.button("Hapus Semua"):
+        del st.session_state['soal_ai']
+        st.rerun()
