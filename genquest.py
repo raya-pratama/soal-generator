@@ -28,10 +28,10 @@ with st.sidebar:
     # Gunakan key unik untuk tombol generate
     generate_btn = st.button("Generate Soal 🚀", key="main_generate_btn")
 
-# 4. LOGIKA GENERATE (PROMPT DIPERBAIKI)
+# 4. LOGIKA GENERATE
 if generate_btn and topik:
     with st.spinner("AI sedang merancang soal..."):
-        # Instruksi spesifik agar pilihan ganda tidak hilang
+       
         if tipe == "Pilihan Ganda":
             detail_instruksi = "Buat soal pilihan ganda dengan 4 opsi (A, B, C, D) di bagian [PERTANYAAN]."
         else:
@@ -73,7 +73,7 @@ if generate_btn and topik:
             st.session_state['vis_info'] = ambil_bagian("PENJELASAN", txt)
             st.session_state['vis_tipe'] = tipe
             st.session_state['gen_id'] = time.time()
-            st.rerun() # Ditambahkan agar langsung muncul setelah klik
+            st.rerun() 
             
         except Exception as e:
             st.error(f"Kesalahan Generate: {e}")
@@ -89,7 +89,7 @@ if 'vis_soal' in st.session_state:
     st.subheader("📋 Pertanyaan")
     st.write(st.session_state['vis_soal'])
     
-    # Tombol jawaban dengan KEY UNIK (menggunakan gen_id)
+    
     key_tombol = f"btn_jawab_{st.session_state.get('gen_id', '0')}"
     
     if st.button("Tampilkan Jawaban & Solusi", key=key_tombol):
@@ -100,7 +100,7 @@ if 'vis_soal' in st.session_state:
             st.write(st.session_state['vis_kunci'])
         st.info(f"**Penjelasan:**\n{st.session_state['vis_info']}")
 
-    # Tombol reset dengan KEY UNIK
+    
     if st.button("Hapus & Reset", key=f"reset_{st.session_state.get('gen_id', '0')}"):
         for k in list(st.session_state.keys()):
             del st.session_state[k]
